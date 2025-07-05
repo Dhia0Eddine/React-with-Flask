@@ -5,9 +5,9 @@ import Sidebar from "../../../components/admin/Sidebar/Sidebar";
 
 const AdminPage = () => {
   return (
-    <div className="admin-layout">
+    <div className="grid grid-cols-[250px_1fr] min-h-screen">
       <Sidebar />
-      <div className="admin-content">
+      <div className="p-8">
         <Outlet />
       </div>
     </div>
