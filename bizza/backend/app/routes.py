@@ -3,6 +3,9 @@ from .models.models import EventRegistration,Speaker, db
 from .utils.utils import allowed_file, get_secure_filename,os
 from flask import current_app
 from flask import send_from_directory
+from flask import request, jsonify, abort
+
+from werkzeug.exceptions import Conflict, InternalServerError
 import os
 
 
@@ -61,13 +64,23 @@ def add_attendees():
         'success': True,
         'new_attendee': new_attendee.format()
     }), 201
-@main.route("/api/v1/speakers",methods=['GET'])
 
+@main.route("/api/v1/speakers", methods=["GET"])
 def get_speakers():
-    speakers=Speaker.query.all()
-    if not speakers:
-        return jsonify({"error": "Np speakers were found"}), 404
-    return jsonify ([speaker.format() for speaker in speakers]), 200
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 10, type=int)
+    
+    pagination = Speaker.query.paginate(page=page, per_page=per_page, error_out=False)
+
+    if not pagination.items:
+        return jsonify({"error": "No speakers found"}), 404
+
+    return jsonify({
+        "speakers": [speaker.format() for speaker in pagination.items],
+        "total_pages": pagination.pages,
+        "total_items": pagination.total
+    }), 200
+
 
 @main.route('/api/v1/speakers', methods=['POST'])
 def add_speaker():
@@ -159,6 +172,29 @@ def update_speaker(speaker_id):
 
 
 
-@main.route("/ping")
-def ping():
-    return "pong"
+@main.route('/api/v1/speakers/<int:speaker_id>', methods=['DELETE'])
+def delete_speaker(speaker_id):
+    speaker = Speaker.query.get_or_404(speaker_id)
+
+    # OPTIONAL: check for related events
+    # events = Event.query.filter_by(speaker_id=speaker_id).all()
+    # if events:
+    #     abort(Conflict("This speaker has associated events, please delete them first."))
+
+    # Delete the avatar file if it exists and is not default
+
+    if speaker.speaker_avatar and speaker.speaker_avatar != "default_avatar.png":
+        avatar_path= os.path.join(current_app.config["UPLOAD_FOLDER"], speaker.speaker_avatar)
+        if os.path.exists(avatar_path): 
+            os.remove(avatar_path)
+        
+
+    try:
+        db.session.delete(speaker)
+        db.session.commit()
+        return jsonify({"message": "Speaker deleted successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        abort(InternalServerError("Error while deleting speaker"))
+
+
